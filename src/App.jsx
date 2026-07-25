@@ -962,30 +962,48 @@
 
 
 
-
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { supabase, TABLE } from './supabase'
 
 const PAGE_SIZE = 50
 
-// Portals where "Open tender" should go straight to the portal home,
-// NOT the deep session-bound tender link. Keyed by the link's hostname.
-const DIRECT_PORTALS = {
-  'eproc.rajasthan.gov.in':          'https://eproc.rajasthan.gov.in',
-  'jktenders.gov.in':                'https://jktenders.gov.in',
+// Every tender opens straight to its portal homepage. Keyed by the
+// detail-link hostname.
+const PORTAL_HOME = {
   'uktenders.gov.in':                'https://uktenders.gov.in',
+  'mahatenders.gov.in':              'https://mahatenders.gov.in',
+  'assamtenders.gov.in':             'https://assamtenders.gov.in',
+  'tendersodisha.gov.in':            'https://tendersodisha.gov.in',
+  'eprocure.goa.gov.in':             'https://eprocure.goa.gov.in',
+  'mptenders.gov.in':                'https://mptenders.gov.in',
   'tenders.ladakh.gov.in':           'https://tenders.ladakh.gov.in',
-  'eprocurebhel.co.in':              'https://eprocurebhel.co.in',
-  'eprocure.andamannicobar.gov.in':  'https://eprocure.andamannicobar.gov.in',
-  'ddtenders.gov.in':                'https://ddtenders.gov.in',
+  'eproc.punjab.gov.in':             'https://eproc.punjab.gov.in',
+  'etenders.hry.nic.in':             'https://etenders.hry.nic.in',
+  'arunachaltenders.gov.in':         'https://arunachaltenders.gov.in',
+  'hptenders.gov.in':                'https://hptenders.gov.in',
+  'jharkhandtenders.gov.in':         'https://jharkhandtenders.gov.in',
+  'etenders.kerala.gov.in':          'https://etenders.kerala.gov.in',
   'manipurtenders.gov.in':           'https://manipurtenders.gov.in',
   'meghalayatenders.gov.in':         'https://meghalayatenders.gov.in',
-  'arunachaltenders.gov.in':         'https://arunachaltenders.gov.in',
+  'mizoramtenders.gov.in':           'https://mizoramtenders.gov.in',
   'nagalandtenders.gov.in':          'https://nagalandtenders.gov.in',
-  'dnhtenders.gov.in':               'https://dnhtenders.gov.in',
+  'eproc.rajasthan.gov.in':          'https://eproc.rajasthan.gov.in',
   'sikkimtender.gov.in':             'https://sikkimtender.gov.in',
+  'tntenders.gov.in':                'https://tntenders.gov.in',
+  'tripuratenders.gov.in':           'https://tripuratenders.gov.in',
+  'etender.up.nic.in':               'https://etender.up.nic.in',
+  'wbtenders.gov.in':                'https://wbtenders.gov.in',
+  'eprocure.andamannicobar.gov.in':  'https://eprocure.andamannicobar.gov.in',
+  'etenders.chd.nic.in':             'https://etenders.chd.nic.in',
+  'dnhtenders.gov.in':               'https://dnhtenders.gov.in',
+  'ddtenders.gov.in':                'https://ddtenders.gov.in',
+  'govtprocurement.delhi.gov.in':    'https://govtprocurement.delhi.gov.in',
+  'jktenders.gov.in':                'https://jktenders.gov.in',
   'tendersutl.gov.in':               'https://tendersutl.gov.in',
-  'mizoramtenders.gov.in':           'https://mizoramtenders.gov.in'
+  'pudutenders.gov.in':              'https://pudutenders.gov.in',
+  'eprocure.gov.in':                 'https://eprocure.gov.in',
+  'etenders.gov.in':                 'https://etenders.gov.in',
+  'eprocurebhel.co.in':              'https://eprocurebhel.co.in'
 }
 
 function escapeRe(s) {
@@ -1035,7 +1053,6 @@ export default function App() {
   const [activeEmail, setActiveEmail] = useState('')
   const [syncMsg, setSyncMsg] = useState('')
   const [pendingEmail, setPendingEmail] = useState(null)   // email awaiting create-confirmation
-  const [openingId, setOpeningId] = useState(null)
 
   // ownerRef holds the email that the CURRENT keywords belong to.
   // Auto-save only writes when ownerRef === activeEmail — stops one account's
@@ -1045,39 +1062,19 @@ export default function App() {
 
   const listTop = useRef(null)
 
-  const openTender = (e, url, id) => {
+  // One click -> open the portal homepage directly (no session priming).
+  const openTender = (e, url) => {
     e.preventDefault()
     if (!url) return
-
-    // Listed portals: open the portal home directly, skip the deep link.
+    let target = url
     try {
       const host = new URL(url).hostname
-      if (DIRECT_PORTALS[host]) {
-        window.open(DIRECT_PORTALS[host], '_blank')
-        return
-      }
-    } catch (err) { /* fall through */ }
-
-    // Other portals: prime the /app root, then redirect to the tender.
-    if (openingId === id) return
-    let root
-    try {
-      const u = new URL(url)
-      const appIdx = u.pathname.indexOf('/app')
-      const path = appIdx >= 0 ? u.pathname.slice(0, appIdx + 4) : u.pathname
-      root = u.origin + path
+      if (PORTAL_HOME[host]) target = PORTAL_HOME[host]   // known portal -> its home
+      else target = new URL(url).origin                   // unknown -> at least the origin
     } catch (err) {
-      root = url
+      target = url
     }
-
-    const w = window.open(root, '_blank')
-    if (!w) { window.open(url, '_blank'); return }
-
-    setOpeningId(id)
-    setTimeout(() => {
-      try { w.location.href = url } catch (err) { /* tab closed */ }
-      setOpeningId(null)
-    }, 10)
+    window.open(target, '_blank')
   }
 
   useEffect(() => {
@@ -1232,11 +1229,9 @@ export default function App() {
     if (error) { setSyncMsg('Error: ' + error.message); return }
 
     if (data && Array.isArray(data.keywords)) {
-      // email exists -> load its keywords right away
       applyLoadedKeywords(em, data.keywords)
       setSyncMsg('Loaded ' + data.keywords.length + ' keywords for ' + em)
     } else {
-      // email not found -> ask before creating
       setPendingEmail(em)
       setSyncMsg('')
     }
@@ -1378,9 +1373,9 @@ export default function App() {
                         href={d.detail_link}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={e => openTender(e, d.detail_link, d.id)}
+                        onClick={e => openTender(e, d.detail_link)}
                       >
-                        {openingId === d.id ? 'Opening…' : 'Open tender →'}
+                        Open tender →
                       </a>
                     )}
                   </div>
