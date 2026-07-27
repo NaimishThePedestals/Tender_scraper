@@ -721,7 +721,7 @@ export default function App() {
     const terms = activeKw ? [activeKw] : (watchOnly ? keywords : [])
     if (terms.length) {
       const ors = terms
-        .flatMap(k => [`title.ilike.%${k}%`, `organisation_name.ilike.%${k}%`])
+        .flatMap(k => [`title.ilike.%${k}%`])
         .join(',')
       q = q.or(ors)
     }
@@ -773,7 +773,7 @@ export default function App() {
         supabase
           .from(TABLE)
           .select('id', { count: 'exact', head: true })
-          .or(`title.ilike.%${k}%,organisation_name.ilike.%${k}%`)
+          .or(`title.ilike.%${k}%`)
           .then(({ count }) => [k, count || 0])
       )
     ).then(pairs => {
