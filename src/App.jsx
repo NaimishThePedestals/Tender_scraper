@@ -753,10 +753,31 @@ export default function App() {
     return () => { cancelled = true }
   }, [buildQuery, page, liveBump])
 
+  // useEffect(() => {
+  //   supabase.from('portal_counts').select('*').then(({ data, error }) => {
+  //     if (error || !data) return
+  //     setPortals(data.map(r => [r.portal, r.n]))
+  //   })
+  // }, [liveBump])
+
+
   useEffect(() => {
     supabase.from('portal_counts').select('*').then(({ data, error }) => {
       if (error || !data) return
-      setPortals(data.map(r => [r.portal, r.n]))
+      const priority = ['Central1', 'Central2']
+      const sorted = data
+        .map(r => [r.portal, r.n])
+        .sort((a, b) => {
+          const aPri = priority.indexOf(a[0])
+          const bPri = priority.indexOf(b[0])
+          if (aPri !== -1 || bPri !== -1) {
+            if (aPri === -1) return 1
+            if (bPri === -1) return -1
+            return aPri - bPri
+          }
+          return a[0].localeCompare(b[0])
+        })
+      setPortals(sorted)
     })
   }, [liveBump])
 
