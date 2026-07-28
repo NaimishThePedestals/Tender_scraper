@@ -650,6 +650,7 @@ export default function App() {
   const [email, setEmail] = useState('')
   const [activeEmail, setActiveEmail] = useState('')
   const [syncMsg, setSyncMsg] = useState('')
+  const [downloading, setDownloading] = useState(false) 
   const [pendingEmail, setPendingEmail] = useState(null)   // email awaiting create-confirmation
   const [manualOpen, setManualOpen] = useState(false)
 
@@ -888,6 +889,62 @@ export default function App() {
     listTop.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  const downloadCsv = async () => {
+    setDownloading(true)
+    try {
+      const pageSize = 1000
+      let from = 0
+      let all = []
+      while (true) {
+        const { data, error } = await buildQuery('*', {})
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .range(from, from + pageSize - 1)
+        if (error) { setSyncMsg('Download failed: ' + error.message); break }
+        if (!data || data.length === 0) break
+        all = all.concat(data)
+        if (data.length < pageSize) break
+        from += pageSize
+      }
+      if (!all.length) { setSyncMsg('Nothing to download for these filters'); setDownloading(false); return }
+
+      const cols = [
+        ['portal', 'Portal'],
+        ['organisation_name', 'Organisation'],
+        ['title', 'Title'],
+        ['reference_no', 'Reference No'],
+        ['tender_id', 'Tender ID'],
+        ['epublished_date', 'Published'],
+        ['closing_date', 'Closing'],
+        ['opening_date', 'Opening'],
+        ['organisation_chain', 'Organisation Chain'],
+        ['detail_link', 'Detail Link'],
+      ]
+
+      const esc = (v) => {
+        const s = (v ?? '').toString().replace(/"/g, '""')
+        return `"${s}"`
+      }
+      const header = cols.map(c => esc(c[1])).join(',')
+      const lines = all.map(row => cols.map(c => esc(row[c[0]])).join(','))
+      const csv = '\uFEFF' + [header, ...lines].join('\r\n')
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const stamp = new Date().toISOString().slice(0, 10)
+      a.href = url
+      a.download = `tenders_${stamp}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setSyncMsg('Downloaded ' + all.length + ' tenders')
+    } catch (e) {
+      setSyncMsg('Download failed: ' + e.message)
+    }
+    setDownloading(false)
+  }
+
   return (
     <>
      <header>
@@ -948,6 +1005,13 @@ export default function App() {
               className={'btn' + (watchOnly ? ' on' : '')}
               onClick={() => { setWatchOnly(!watchOnly); setActiveKw(null); setPage(0) }}
             >Watchlist only</button>
+            <button
+              className="btn"
+              onClick={downloadCsv}
+              disabled={downloading}
+            >
+              {downloading ? 'Preparing…' : 'Download'}
+            </button>
           </div>
 
           <div className="listhead" ref={listTop}>
@@ -1228,7 +1292,7 @@ export default function App() {
       </div>
       <div className="modal-body">
         <p>This web provides access to current tender listings from 2 Central portals, 22 States and 9 Union Territories across India.</p>
-        <p>Currently, tenders are not available for the following states:</p>
+        <p>Currently, tenders are NOT available for the following states:</p>
         <ul>
           <li>Andhra Pradesh</li>
           <li>Bihar</li>
@@ -1243,6 +1307,9 @@ export default function App() {
           <li>The next time you visit the website, simply enter the same email address.</li>
           <li>Your previously saved keywords will be loaded automatically.</li>
         </ol>
+        <div className= "modal-body" style={{ marginTop: '2rem', fontWeight: 'bold' }}>
+        <i>For any questions or concerns, write to deep.thepedestals@gmail.com</i>
+        </div>
       </div>
     </div>
   </div>
