@@ -1233,7 +1233,7 @@ export default function App() {
               />
               <button onClick={addKeyword} aria-label="Add keyword">+</button>
             </div>
-            <div className="kwlist">
+            <div className="kwlist" style={{ maxHeight: 200, overflowY: 'auto' }}>
               {keywords.length === 0 && (
                 <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>No keywords yet. Add one above.</p>
               )}
