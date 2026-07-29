@@ -635,6 +635,7 @@ export default function App() {
   const [selectedPortals, setSelectedPortals] = useState([])
   const [portalMenuOpen, setPortalMenuOpen] = useState(false)
   const [last7, setLast7] = useState(false)
+  const [closing7, setClosing7] = useState(false)
   const [watchOnly, setWatchOnly] = useState(false)
   const [activeKw, setActiveKw] = useState(null)
 
@@ -712,6 +713,14 @@ export default function App() {
       q = q.gte('published_at', cutoff.toISOString())
     }
 
+    if (closing7) {
+      const now = new Date()
+      const in7 = new Date()
+      in7.setDate(in7.getDate() + 7)
+      q = q.gte('closing_at', now.toISOString())
+           .lte('closing_at', in7.toISOString())
+    }
+
     if (debounced.trim()) {
       const s = debounced.trim().replace(/[,()]/g, ' ')
       q = q.or(
@@ -728,7 +737,7 @@ export default function App() {
     }
 
     return q
-  }, [selectedPortals, last7, debounced, activeKw, watchOnly, keywords])
+  }, [selectedPortals, last7, debounced, activeKw, watchOnly, keywords,closing7])
 
   useEffect(() => {
     let cancelled = false
@@ -1021,7 +1030,14 @@ export default function App() {
             <button
               className={'btn' + (last7 ? ' on' : '')}
               onClick={() => { setLast7(!last7); setPage(0) }}
-            >Last 7 days</button>
+            >Published in last 7 days</button>
+
+<button
+              className={'btn' + (closing7 ? ' on' : '')}
+              onClick={() => { setClosing7(!closing7); setPage(0) }}
+            >Closing in 7 days</button>
+
+            
             <button
               className={'btn' + (watchOnly ? ' on' : '')}
               onClick={() => { setWatchOnly(!watchOnly); setActiveKw(null); setPage(0) }}
