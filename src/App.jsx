@@ -570,8 +570,8 @@ const PORTAL_HOME = {
   'jktenders.gov.in':                'https://jktenders.gov.in/nicgep/app?page=FrontEndTendersByOrganisation&service=page',
   'tendersutl.gov.in':               'https://tendersutl.gov.in/nicgep/app?page=FrontEndTendersByOrganisation&service=page',
   'pudutenders.gov.in':              'https://pudutenders.gov.in/nicgep/app?page=FrontEndTendersByOrganisation&service=page',
-  'eprocure.gov.in':                 'https://eprocure.gov.in/nicgep/app?page=FrontEndTendersByOrganisation&service=page',
-  'etenders.gov.in':                 'https://etenders.gov.in/nicgep/app?page=FrontEndTendersByOrganisation&service=page',
+  'eprocure.gov.in':                 'https://eprocure.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page',
+  'etenders.gov.in':                 'https://etenders.gov.in/eprocure/app?page=FrontEndTendersByOrganisation&service=page',
   'eprocurebhel.co.in':              'https://eprocurebhel.co.in/nicgep/app?page=FrontEndTendersByOrganisation&service=page'
 }
 
@@ -654,6 +654,10 @@ export default function App() {
   const [downloading, setDownloading] = useState(false) 
   const [pendingEmail, setPendingEmail] = useState(null)   // email awaiting create-confirmation
   const [manualOpen, setManualOpen] = useState(false)
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackName, setFeedbackName] = useState('')
+  const [feedbackWorking, setFeedbackWorking] = useState('')
+  const [feedbackMissing, setFeedbackMissing] = useState('')
 
   // ownerRef holds the email that the CURRENT keywords belong to.
   // Auto-save only writes when ownerRef === activeEmail — stops one account's
@@ -790,11 +794,25 @@ export default function App() {
     })
   }, [liveBump])
 
+  // useEffect(() => {
+  //   supabase.from('org_count').select('n').single().then(({ data }) => {
+  //     if (data) setOrgCount(data.n)
+  //   })
+  // }, [liveBump])
+
+
   useEffect(() => {
-    supabase.from('org_count').select('n').single().then(({ data }) => {
-      if (data) setOrgCount(data.n)
-    })
-  }, [liveBump])
+    let cancelled = false
+    // pull organisation_name for the current filter, count distinct in JS
+    buildQuery('organisation_name', {})
+      .limit(10000)
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return
+        const uniq = new Set(data.map(r => r.organisation_name).filter(Boolean))
+        setOrgCount(uniq.size)
+      })
+    return () => { cancelled = true }
+  }, [buildQuery, liveBump])
 
   useEffect(() => {
     let cancelled = false
@@ -824,6 +842,18 @@ export default function App() {
         })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
+  }, [])
+
+
+  // count visits; show feedback dialog once past the threshold
+  useEffect(() => {
+    const THRESHOLD = 5
+    const count = parseInt(localStorage.getItem('visit-count') || '0', 10) + 1
+    localStorage.setItem('visit-count', String(count))
+    if (count > THRESHOLD && localStorage.getItem('feedback-shown') !== 'yes') {
+      setShowFeedback(true)
+      localStorage.setItem('feedback-shown', 'yes')
+    }
   }, [])
 
   const applyLoadedKeywords = (em, kw) => {
@@ -937,6 +967,8 @@ export default function App() {
       }
       if (!all.length) { setSyncMsg('Nothing to download for these filters'); setDownloading(false); return }
 
+
+
       const cols = [
         ['portal', 'Portal'],
         ['organisation_name', 'Organisation'],
@@ -975,6 +1007,24 @@ export default function App() {
     setDownloading(false)
   }
 
+
+  const submitFeedback = async () => {
+    const working = feedbackWorking.trim()
+    const missing = feedbackMissing.trim()
+    if (!working && !missing) { setShowFeedback(false); return }
+    await supabase.from('feedback').insert({
+      name: feedbackName.trim() || null,
+      working: working || null,
+      missing: missing || null,
+      visit_count: parseInt(localStorage.getItem('visit-count') || '0', 10),
+      created_at: new Date().toISOString()
+    })
+    setFeedbackName('')
+    setFeedbackWorking('')
+    setFeedbackMissing('')
+    setShowFeedback(false)
+  } 
+
   return (
     <>
      <header>
@@ -999,7 +1049,7 @@ export default function App() {
         <div className="stats">
             <div className="stat">
               <div className="k">Portals</div>
-              <div className="v">{portals.length}</div>
+              <div className="v">{selectedPortals.length || portals.length}</div>
             </div>
             <div className="stat">
               <div className="k">Organisations</div>
@@ -1049,6 +1099,15 @@ export default function App() {
             >
               {downloading ? 'Preparing…' : 'Download'}
             </button>
+          </div>
+
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 12, color: 'var(--match)', marginTop: 8,
+            background: 'var(--match-bg)', padding: '5px 12px', borderRadius: 100
+          }}>
+            <span>✨</span>
+            <span>AI-powered Smart Search — coming soon</span>
           </div>
 
           <div className="listhead" ref={listTop}>
@@ -1316,6 +1375,20 @@ export default function App() {
               <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8 }}>{syncMsg}</p>
             )}
           </div>
+
+          <div className="panel">
+            <button
+              className="btn"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onClick={() => setShowFeedback(true)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Share your feedback
+            </button>
+          </div>
         </aside>
       </div>
       {manualOpen && (
@@ -1351,6 +1424,68 @@ export default function App() {
     </div>
   </div>
 )}
+
+{showFeedback && (
+        <div className="modal-overlay">
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-topbar" />
+            <button className="modal-close" onClick={() => setShowFeedback(false)} aria-label="Close">×</button>
+            <div className="modal-head">
+              <h4>Quick feedback</h4>
+            </div>
+            <div className="modal-body">
+              <p>You've used the tender tracker a few times — we'd love your thoughts.</p>
+
+              <input
+                type="text"
+                value={feedbackName}
+                onChange={e => setFeedbackName(e.target.value)}
+                placeholder="Your name"
+                style={{
+                  width: '100%', height: 34, padding: '0 10px', marginTop: 8,
+                  border: '1px solid var(--line-2)', borderRadius: 'var(--radius)',
+                  font: 'inherit', fontSize: 13
+                }}
+              />
+
+              <label style={{ fontSize: 12, color: 'var(--ink-2)', display: 'block', marginTop: 12, marginBottom: 4 }}>
+                What's working well?
+              </label>
+              <textarea
+                value={feedbackWorking}
+                onChange={e => setFeedbackWorking(e.target.value)}
+                placeholder="What you find useful…"
+                rows={3}
+                style={{
+                  width: '100%', padding: 10,
+                  border: '1px solid var(--line-2)', borderRadius: 'var(--radius)',
+                  font: 'inherit', fontSize: 13, resize: 'vertical'
+                }}
+              />
+
+              <label style={{ fontSize: 12, color: 'var(--ink-2)', display: 'block', marginTop: 12, marginBottom: 4 }}>
+                What's missing or could be better?
+              </label>
+              <textarea
+                value={feedbackMissing}
+                onChange={e => setFeedbackMissing(e.target.value)}
+                placeholder="What you'd like added or changed…"
+                rows={3}
+                style={{
+                  width: '100%', padding: 10,
+                  border: '1px solid var(--line-2)', borderRadius: 'var(--radius)',
+                  font: 'inherit', fontSize: 13, resize: 'vertical'
+                }}
+              />
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button className="btn" onClick={() => setShowFeedback(false)}>Maybe later</button>
+                <button className="btn on" onClick={submitFeedback}>Send feedback</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
