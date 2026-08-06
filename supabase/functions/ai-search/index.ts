@@ -804,7 +804,7 @@ const TABLE = "all_tenders";
 const SELECT_COLS =
   "tender_id,portal,organisation_name,title,epublished_date,closing_date,detail_link";
 const PER_PASS_LIMIT = 500;
-const MAX_CANDIDATES = 500;
+const MAX_CANDIDATES = 300;
 
 // ---- Vertex AI config ----
 const GCP_PROJECT_ID = Deno.env.get("GCP_PROJECT_ID") ?? "";
@@ -1076,14 +1076,30 @@ async function runSearch(query: string) {
   const store = new Map<string, any>();
   const passInfo: { pass: number; keywords: string[]; rows: number }[] = [];
 
-  for (const passNo of [1, 2, 3]) {
-    const keywords = await generateKeywords(query, passNo);
-    const rows = await queryByKeywords(keywords);
+  // for (const passNo of [1, 2, 3]) {
+  //   const keywords = await generateKeywords(query, passNo);
+  //   const rows = await queryByKeywords(keywords);
+  //   for (const row of rows) {
+  //     const tid = row.tender_id;
+  //     if (tid && !store.has(tid)) store.set(tid, row);
+  //   }
+  //   passInfo.push({ pass: passNo, keywords, rows: rows.length });
+  // }
+
+  const passResults = await Promise.all(
+    [1, 2, 3].map(async (passNo) => {
+      const keywords = await generateKeywords(query, passNo);
+      const rows = await queryByKeywords(keywords);
+      return { pass: passNo, keywords, rows };
+    })
+  );
+  
+  for (const { pass, keywords, rows } of passResults) {
     for (const row of rows) {
       const tid = row.tender_id;
       if (tid && !store.has(tid)) store.set(tid, row);
     }
-    passInfo.push({ pass: passNo, keywords, rows: rows.length });
+    passInfo.push({ pass, keywords, rows: rows.length });
   }
 
   let candidates = [...store.values()];
